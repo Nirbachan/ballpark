@@ -1,0 +1,34 @@
+{
+  "manifest_version": 3,
+  "name": "Ballpark",
+  "version": "1.3.1",
+  "description": "Estimated salary ranges on LinkedIn: hover a person's name, or glance at the pill on any job.",
+  "content_scripts": [
+    {
+      "matches": [
+        "https://*.linkedin.com/*"
+      ],
+      "js": [
+        "src/data.js",
+        "src/engine.js",
+        "src/store.js",
+        "src/adapter.js",
+        "src/ui.js",
+        "src/person.js",
+        "src/main.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "permissions": [
+    "storage",
+    "contextMenus"
+  ],
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_title": "Ballpark"
+  },
+  "background": {
+    "service_worker": "background.js"
+  }
+}

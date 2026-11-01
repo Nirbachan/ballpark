@@ -1,0 +1,7 @@
+kind,title,company,location,actual,notes
+# One row per salary you actually know. Lines starting with # are ignored.
+# kind: job or person. For person rows, put the job title in "title", not the full headline.
+# actual: annual pay in the local currency of the location. Formats: 2400000, 24L, 1.2Cr, 180k, 180000.
+# Use the same basis Ballpark shows: CTC in India, total pay elsewhere.
+# Example (delete this line and add your own):
+# job,Manager,Deloitte,Bengaluru,30L,peer offer 2026

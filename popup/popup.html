@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Ballpark</title>
+<style>
+  :root { --ink:#1C2530; --muted:#5E6875; --line:#E4E8EC; --bg:#FFFFFF; --field:#2F6E4F; --track:#E7EEE9;
+          --high:#2F6E4F; --medium:#A77A1F; --low:#B0503A; }
+  @media (prefers-color-scheme: dark) {
+    :root { --ink:#E6EAEE; --muted:#9AA4AE; --line:#333C45; --bg:#1E252C; --field:#6BBF94; --track:#2A3530;
+            --high:#6BBF94; --medium:#D9A94A; --low:#E08A73; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; width: 320px; background: var(--bg); color: var(--ink);
+    font: 13px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-variant-numeric: tabular-nums; }
+  section { padding: 14px 16px; border-bottom: 1px solid var(--line); }
+  section:last-child { border-bottom: 0; }
+  h1 { font-size: 15px; margin: 0; }
+  h2 { font-size: 13px; margin: 0 0 8px; }
+  p { margin: 0; color: var(--muted); font-size: 12px; }
+  .row { display: flex; align-items: flex-start; gap: 12px; }
+  .row div { flex: 1; }
+  .switch { position: relative; width: 34px; height: 20px; flex: none; margin-top: 2px; }
+  .switch input { opacity: 0; width: 100%; height: 100%; margin: 0; position: absolute; cursor: pointer; }
+  .switch span { position: absolute; inset: 0; border-radius: 999px; background: var(--line); transition: background .15s; pointer-events: none; }
+  .switch span::after { content: ""; position: absolute; left: 3px; top: 3px; width: 14px; height: 14px; border-radius: 50%; background: #fff; transition: transform .15s; }
+  .switch input:checked + span { background: var(--field); }
+  .switch input:checked + span::after { transform: translateX(14px); }
+  .switch input:focus-visible + span { outline: 2px solid var(--field); outline-offset: 2px; }
+  .big { font-size: 26px; font-weight: 650; letter-spacing: -0.02em; }
+  .split { display: flex; height: 6px; border-radius: 3px; overflow: hidden; background: var(--track); margin: 8px 0 6px; }
+  .split i { display: block; }
+  .legend { display: flex; gap: 12px; font-size: 12px; color: var(--muted); }
+  .legend b { color: var(--ink); font-weight: 600; }
+  table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 12px; }
+  th, td { text-align: left; padding: 4px 0; border-top: 1px solid var(--line); }
+  th { color: var(--muted); font-weight: 400; }
+  td:not(:first-child), th:not(:first-child) { text-align: right; }
+  .actions { display: flex; gap: 8px; }
+  button { font: inherit; font-size: 12px; color: var(--ink); background: none; cursor: pointer;
+    border: 1px solid var(--line); border-radius: 999px; padding: 4px 12px; }
+  button:hover, button:focus-visible { border-color: var(--field); color: var(--field); outline: none; }
+  button:disabled { opacity: .45; cursor: default; }
+  @media (prefers-reduced-motion: reduce) { .switch span, .switch span::after { transition: none; } }
+</style>
+</head>
+<body>
+  <section>
+    <h1>Ballpark</h1>
+    <p>Estimated salary ranges on LinkedIn. Runs only in your browser.</p>
+  </section>
+
+  <section class="row">
+    <div>
+      <h2>Estimate pay when hovering names</h2>
+      <p>Shows an estimate for the person's role when you rest the pointer on their name or photo. It describes the role, not what they earn.</p>
+    </div>
+    <label class="switch"><input type="checkbox" id="personMode" aria-label="Estimate pay when hovering names"><span></span></label>
+  </section>
+
+  <section>
+    <h2>Right-click any name</h2>
+    <p>Choose "Estimate pay with Ballpark" on any person's name or photo. Works whether or not hover is on.</p>
+  </section>
+
+  <section id="results">
+    <h2>Your feedback</h2>
+    <div id="empty"><p>No feedback yet. Use "Was this close?" on any estimate, and your results will build up here.</p></div>
+    <div id="summary" hidden>
+      <div class="big" id="closePct"></div>
+      <p id="closeText"></p>
+      <div class="split" aria-hidden="true">
+        <i id="barClose" style="background:var(--high)"></i><i id="barLow" style="background:var(--medium)"></i><i id="barHigh" style="background:var(--low)"></i>
+      </div>
+      <div class="legend"><span>Close <b id="nClose"></b></span><span>Too low <b id="nLow"></b></span><span>Too high <b id="nHigh"></b></span></div>
+      <table>
+        <thead><tr><th>Signal</th><th>Rated</th><th>Close</th></tr></thead>
+        <tbody id="bySignal"></tbody>
+      </table>
+      <p id="bias" style="margin-top:8px"></p>
+    </div>
+  </section>
+
+  <section class="actions">
+    <button id="export" disabled>Export CSV</button>
+    <button id="clear" disabled>Clear feedback</button>
+  </section>
+
+  <section>
+    <h2>Something not working?</h2>
+    <p>Hover the name that fails, then open this menu and copy the report. Names and text are masked.</p>
+    <div class="actions" style="margin-top:8px"><button id="diag">Copy diagnostics</button></div>
+    <p id="diagMsg" style="margin-top:6px"></p>
+  </section>
+  <script src="popup.js"></script>
+</body>
+</html>
