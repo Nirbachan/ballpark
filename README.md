@@ -1,66 +1,92 @@
 # Ballpark
 
-A Chrome extension that shows estimated salary ranges on LinkedIn.
+**A Chrome extension that puts an estimated pay range on LinkedIn job listings.**
 
-- **Right-click any person's name or photo** and choose "Estimate pay with Ballpark", or turn on name hover in the Ballpark menu, to see an estimated pay range for their role, in their local currency, with the INR equivalent for anyone outside India.
-- **Glance at any job listing** to see a small pill with the estimated range. Hover the pill to see how it was estimated and open real salary data on AmbitionBox, Glassdoor, Levels.fyi, 6figr or Reddit.
+It does not know what anyone earns — no public source does. It estimates a market range for the *role* from the title, employer and city, runs entirely on your machine, and tells you how much to trust each estimate.
 
-It estimates pay for a **role**, never what a specific person earns.
+![Estimated pay badges on LinkedIn job results](screenshots/job-badges.png)
+
+---
+
+## What it does
+
+A **pay badge** sits on each job row. Hover it and an **estimate card** opens with the reasoning behind the number.
+
+![The estimate card, showing a partial-signal state](screenshots/estimate-card.png)
+
+Every card carries a signal state:
+
+| State | Meaning |
+|---|---|
+| **Strong signal** | Role, seniority, employer and city all read cleanly |
+| **Partial signal** | Something was missing — usually the employer isn't in the tier list |
+| **No estimate** | Too little to go on. It shows nothing rather than guess. |
+
+That last one is the point. A confident wrong number is worse than no number.
+
+Each card also links out to Glassdoor, Levels.fyi and Reddit to check real figures, and has a **Was this close?** row so you can mark an estimate as too low or too high.
+
+![Hovering a profile to open the estimate card](screenshots/demo.gif)
+
+---
 
 ## How the estimate works
 
 ```
-midpoint = market band[level] × role family × employer tier × city premium
-range    = midpoint ± spread, where spread widens as confidence falls
+midpoint = base[role family][level] x city multiplier x employer tier x experience
+range    = midpoint ± a spread that widens as confidence falls
 ```
 
-Bands are anchored in each market's own currency (India in INR, UAE in AED, and so on) instead of scaling US figures, so India's gap between IT services and product companies is modelled directly.
+A low-confidence read produces a visibly wider, less useful range rather than a falsely precise one. The inputs live in three editable JSON files — the role/level matrix, city multipliers and currencies, and employer tiers — so the model can be retuned without touching code.
 
-**Signal strength** (strong, partial, weak) says how much the title, employer and location told the model. It is not accuracy. Accuracy comes only from validation, below, and once measured it is shown on every card.
+---
 
-Every figure states what it includes: CTC in India, total pay elsewhere, and "includes stock" where top employers pay a large share in equity.
+## Privacy
 
-When a headline states no role or seniority, Ballpark says so instead of guessing.
+| Data | Where it goes |
+|---|---|
+| Names, photos, profile URLs | Never leave the page. Not stored, not sent. |
+| Role, employer, city | Stays local, unless you add your own API key for refinement |
+| Everything else | Nowhere. No server, no analytics, no account. |
 
-## Privacy and scope
+Site access is limited to `linkedin.com`. With no API key set, the Network tab shows no outbound requests at all. Nothing runs on page load or in the background — only when you hover.
 
-- Runs entirely in your browser. No server, no analytics, no network requests. Settings and feedback are stored locally in Chrome.
-- Person hover is off by default: a range next to someone's name can read as a claim about them.
-- Reads only what LinkedIn has already shown on your screen. Never crawls, scrolls or clicks.
-- Salary sites are never scraped. The source links open a normal search you choose to follow.
-- A personal research prototype, not published to the Chrome Web Store.
+---
 
 ## Install
 
-1. Download and unzip. Open `chrome://extensions` and turn on Developer mode.
-2. Click **Load unpacked** and select the folder containing `manifest.json`.
-3. Refresh any open LinkedIn tabs.
+No build step, no dependencies.
 
-## Tests
+1. Download or clone this repo
+2. Open `chrome://extensions` and turn on **Developer mode**
+3. Click **Load unpacked** and select the folder containing `manifest.json`
+4. Open LinkedIn job search
 
-Run these before every release:
+Settings are under **Details → Extension options**: display currency, hover delay, which surfaces are active, and cache controls.
 
-- `node tests/validate.js`: accuracy against salaries you know
-- `python3 tests/extension_test.py`: loads the real extension in Chromium on LinkedIn addresses and checks hover, the hover setting, right-click, diagnostics and job pills end to end
-- `python3 tests/browser_test.py`: hover and pill checks on LinkedIn-shaped pages in `tests/pages/` (needs `pip install playwright` and `playwright install chromium`)
+---
 
-When LinkedIn changes its layout and something breaks, save a copy of the broken markup into `tests/pages/` and add a case, so it stays fixed.
+## Limitations
 
-## Tuning
+This is a personal prototype, not a product, and not something to use in a real pay decision.
 
-All numbers live in `src/data.js`: market bands, role families, levels, employer tiers, city premiums and exchange rates. No other file needs changing to recalibrate. LinkedIn selectors live only in `src/adapter.js`.
+- The number describes a **role**, not a person. Two people with the same title at the same employer routinely differ by a wide margin.
+- Senior roles are the weakest case. Senior people often write headlines full of achievements and no job title, so seniority falls back to a mid-level default and the estimate comes out low.
+- Employer tiers are coarse and incomplete. An employer that isn't catalogued drops to a default tier and the card says so.
+- The compensation matrix and FX rates are hand-maintained snapshots and drift.
+- Estimates have not yet been validated against real reported salaries.
 
-## Validation
+For real decisions use levels.fyi, AmbitionBox, Glassdoor, or a survey your employer licenses.
 
-Two ways to measure accuracy:
+---
 
-1. **Known salaries.** Add rows to `tests/validation.csv`, then run `node tests/validate.js`. It reports the share of real salaries inside the range (target 70%), the worst miss (limit 2x), bias, results by market, signal and employer tier, and the biggest misses. It also prints a `CALIBRATION` line to paste into `src/data.js`, so every card shows its measured hit rate.
-2. **Feedback while browsing.** Every card asks "Was this close?". Results appear in the Ballpark menu and export as CSV.
+## What I'd build next
 
-Results so far:
+1. Read seniority from the experience section rather than the headline — fixes the biggest failure mode at its root
+2. Market-anchored baselines instead of scaling one matrix by a city multiplier
+3. Suppress precise figures below a confidence threshold, showing a band instead
+4. Use the **Was this close?** feedback to calibrate against reality
 
-| Measure | Result |
-|---|---|
-| Salaries tested | |
-| Inside range | |
-| Worst miss | |
+---
+
+*Built with Claude. Vanilla JavaScript, Manifest V3, no dependencies, no build step.*
