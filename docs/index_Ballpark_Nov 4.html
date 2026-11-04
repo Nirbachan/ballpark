@@ -1,0 +1,724 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ballpark</title>
+<meta name="description" content="A Chrome extension that puts an estimated pay range on LinkedIn job listings. Runs locally. Never claims to know anyone's actual pay.">
+<meta name="theme-color" content="#3B5BDB">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    /* wallpaper */
+    --w1:#3B5BDB;  /* cobalt */
+    --w2:#9775FA;  /* iris */
+    --w3:#FF8A5B;  /* coral */
+    --w4:#38D9A9;  /* mint */
+    --wall:#E9EDF7;
+
+    /* text */
+    --ink:#0F1320;
+    --ink-2:rgba(15,19,32,.68);
+    --ink-3:rgba(15,19,32,.48);
+
+    /* glass */
+    --glass:rgba(255,255,255,.42);
+    --glass-strong:rgba(255,255,255,.62);
+    --glass-edge:rgba(255,255,255,.75);
+    --glass-edge-low:rgba(255,255,255,.18);
+    --glass-shadow:0 18px 50px -12px rgba(28,36,80,.28), 0 2px 6px rgba(28,36,80,.08);
+    --tint:#3B5BDB;
+    --tint-ink:#fff;
+
+    /* signal */
+    --strong:#12B886;
+    --partial:#F59F00;
+    --weak:#FA5252;
+
+    --spring:cubic-bezier(.3,1.18,.42,1);
+    --r-xl:34px; --r-lg:26px; --r-md:18px; --r-pill:999px;
+    --font:-apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Inter Tight", system-ui, sans-serif;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --wall:#070A14;
+      --w1:#2F4AC9; --w2:#7048E8; --w3:#E8590C; --w4:#0CA678;
+      --ink:#F4F6FC; --ink-2:rgba(244,246,252,.72); --ink-3:rgba(244,246,252,.5);
+      --glass:rgba(28,32,48,.38); --glass-strong:rgba(34,38,58,.6);
+      --glass-edge:rgba(255,255,255,.28); --glass-edge-low:rgba(255,255,255,.06);
+      --glass-shadow:0 22px 60px -14px rgba(0,0,0,.6), 0 2px 8px rgba(0,0,0,.3);
+      --tint:#5C7CFA;
+    }
+  }
+  :root[data-theme="dark"]{
+    --wall:#070A14;
+    --w1:#2F4AC9; --w2:#7048E8; --w3:#E8590C; --w4:#0CA678;
+    --ink:#F4F6FC; --ink-2:rgba(244,246,252,.72); --ink-3:rgba(244,246,252,.5);
+    --glass:rgba(28,32,48,.38); --glass-strong:rgba(34,38,58,.6);
+    --glass-edge:rgba(255,255,255,.28); --glass-edge-low:rgba(255,255,255,.06);
+    --glass-shadow:0 22px 60px -14px rgba(0,0,0,.6), 0 2px 8px rgba(0,0,0,.3);
+    --tint:#5C7CFA;
+  }
+
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%; scroll-behavior:smooth; scroll-padding-top:96px}
+  body{
+    margin:0; min-height:100vh; color:var(--ink); background:var(--wall);
+    font-family:var(--font); font-size:17px; line-height:1.55;
+    -webkit-font-smoothing:antialiased; font-variant-numeric:tabular-nums;
+    overflow-x:hidden;
+  }
+  a{color:inherit}
+  :focus-visible{outline:2.5px solid var(--tint); outline-offset:3px; border-radius:12px}
+
+  /* ---------- wallpaper: the thing the glass bends ---------- */
+  .wallpaper{position:fixed; inset:0; z-index:-1; overflow:hidden; pointer-events:none}
+  .paint{position:absolute; inset:-10%;
+    background:
+      radial-gradient(42% 48% at 12% 8%,  var(--w1) 0%, color-mix(in srgb, var(--w1) 0%, transparent) 100%),
+      radial-gradient(38% 44% at 92% 18%, var(--w2) 0%, color-mix(in srgb, var(--w2) 0%, transparent) 100%),
+      radial-gradient(40% 42% at 38% 104%, var(--w3) 0%, color-mix(in srgb, var(--w3) 0%, transparent) 100%),
+      radial-gradient(30% 34% at 88% 92%, var(--w4) 0%, color-mix(in srgb, var(--w4) 0%, transparent) 100%);
+    opacity:.9}
+  .grain{position:absolute; inset:0; opacity:.06; mix-blend-mode:overlay;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
+  .dots{position:absolute; inset:0; opacity:.5;
+    background-image:radial-gradient(circle, color-mix(in srgb, var(--ink) 38%, transparent) 1.3px, transparent 1.6px);
+    background-size:22px 22px;
+    -webkit-mask-image:linear-gradient(180deg,#000 0%,rgba(0,0,0,.55) 100%); mask-image:linear-gradient(180deg,#000 0%,rgba(0,0,0,.55) 100%)}
+
+  /* ---------- the glass material ---------- */
+  .glass{
+    position:relative; isolation:isolate;
+    background:var(--glass);
+    -webkit-backdrop-filter:blur(14px) saturate(185%);
+            backdrop-filter:blur(14px) saturate(185%);
+    border-radius:var(--r-lg);
+    box-shadow:
+      inset 0 1px 0 var(--glass-edge),
+      inset 0 -1px 0 var(--glass-edge-low),
+      inset 0 0 0 1px var(--glass-edge-low),
+      var(--glass-shadow);
+  }
+  /* specular sheen along the top-left rim */
+  .glass::before{
+    content:""; position:absolute; inset:0; border-radius:inherit; pointer-events:none; z-index:-1;
+    background:
+      radial-gradient(120% 60% at 0% 0%, rgba(255,255,255,.55), rgba(255,255,255,0) 45%),
+      radial-gradient(80% 40% at 100% 100%, rgba(255,255,255,.18), rgba(255,255,255,0) 50%);
+    mix-blend-mode:soft-light;
+  }
+  /* pointer-tracked highlight: the light moves with you (works in every browser) */
+  .glass::after{
+    content:""; position:absolute; inset:0; border-radius:inherit; pointer-events:none; z-index:-1;
+    background:radial-gradient(220px circle at var(--mx,50%) var(--my,0%), rgba(255,255,255,.55), rgba(255,255,255,0) 60%);
+    opacity:0; transition:opacity .35s;
+    mix-blend-mode:soft-light;
+  }
+  .glass.lit::after{opacity:1}
+  /* press: glass squishes and springs back */
+  .squish{transition:transform .5s cubic-bezier(.2,1.8,.4,1)}
+  .squish:active{transform:scale(.965)}
+  /* true edge refraction — Chromium only; filter is built per element in JS */
+  .refract .glass.lens{
+    -webkit-backdrop-filter:var(--lensf);
+            backdrop-filter:var(--lensf);
+  }
+  @supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){
+    .glass{background:var(--glass-strong)}
+  }
+
+  /* glass nested in glass can't see the wallpaper (the outer panel is its backdrop root), so skip the cost */
+  .stage .glass{-webkit-backdrop-filter:none; backdrop-filter:none}
+  .wrap{max-width:1120px; margin:0 auto; padding:0 20px}
+
+  /* ---------- floating nav ---------- */
+  .nav{
+    --glass:color-mix(in srgb, var(--glass-strong) 85%, transparent);
+    position:sticky; top:14px; z-index:20; margin:14px auto 0; width:max-content; max-width:calc(100% - 32px);
+    display:flex; align-items:center; gap:4px; padding:6px; border-radius:var(--r-pill);
+  }
+  .brand{display:flex; align-items:center; gap:9px; padding:6px 14px 6px 8px; font-weight:700; letter-spacing:-.02em; text-decoration:none}
+  .logo{width:26px; height:26px; border-radius:9px; display:grid; place-items:center;
+    background:linear-gradient(140deg,var(--w1),var(--w2)); box-shadow:inset 0 1px 0 rgba(255,255,255,.5)}
+  .logo svg{width:16px; height:16px}
+  .nav a.link{padding:8px 14px; border-radius:var(--r-pill); text-decoration:none; font-size:15px; color:var(--ink-2); font-weight:500}
+  .nav a.link, .nav .brand, .nav .theme, .nav .btn{position:relative; z-index:1}
+  .nav a.link:hover{color:var(--ink)}
+  .navpill{
+    position:absolute; top:6px; bottom:6px; left:0; width:0; z-index:0; border-radius:var(--r-pill); pointer-events:none; opacity:0;
+    background:var(--glass-strong); box-shadow:inset 0 1px 0 var(--glass-edge), inset 0 0 0 1px var(--glass-edge-low);
+    transition:transform .5s var(--spring), width .5s var(--spring), opacity .25s;
+  }
+  .navpill.on{opacity:1}
+  .theme{appearance:none; border:0; background:transparent; color:var(--ink-2); width:36px; height:36px; border-radius:50%; cursor:pointer; display:grid; place-items:center}
+  .theme:hover{color:var(--ink)}
+  .theme svg{width:18px; height:18px}
+  @media (max-width:620px){ .nav a.link.hide-sm{display:none} }
+
+  /* ---------- buttons ---------- */
+  .btn{
+    display:inline-flex; align-items:center; gap:9px; padding:13px 22px; border-radius:var(--r-pill);
+    font:600 16px/1 var(--font); text-decoration:none; cursor:pointer; border:0; color:var(--ink);
+    transition:transform .2s cubic-bezier(.3,1.6,.5,1);
+  }
+  .btn:active{transform:scale(.96)}
+  .btn svg{width:18px; height:18px}
+  .btn.tinted{
+    color:var(--tint-ink);
+    background:linear-gradient(180deg, color-mix(in srgb, var(--tint) 82%, white), var(--tint));
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.55), inset 0 -2px 6px rgba(0,0,0,.12), 0 10px 26px -8px color-mix(in srgb, var(--tint) 70%, transparent);
+  }
+  .nav .btn{padding:9px 16px; font-size:15px}
+
+  /* ---------- hero ---------- */
+  .hero{display:grid; grid-template-columns:1.02fr 1fr; gap:48px; align-items:center; padding:84px 0 72px}
+  @media (max-width:900px){ .hero{grid-template-columns:1fr; gap:40px; padding:56px 0 48px} }
+  h1{
+    margin:0; font-weight:800; letter-spacing:-.045em; line-height:.98;
+    font-size:clamp(46px,7.4vw,88px);
+  }
+  .lede{margin:24px 0 32px; font-size:clamp(18px,2vw,21px); line-height:1.5; color:var(--ink-2); max-width:34ch}
+  .ctas{display:flex; flex-wrap:wrap; gap:12px}
+  .fine{margin-top:18px; font-size:14px; color:var(--ink-3)}
+
+  /* ---------- live demo ---------- */
+  .stage{position:relative; padding:18px; border-radius:var(--r-xl)}
+  .stage-head{display:flex; align-items:center; justify-content:space-between; padding:4px 8px 14px}
+  .stage-head b{font-size:15px; letter-spacing:-.01em}
+  .stage-head span{font-size:13px; color:var(--ink-3)}
+  .jobs{list-style:none; margin:0; padding:0; display:grid; gap:8px}
+  .job{
+    display:grid; grid-template-columns:40px 1fr auto; gap:12px; align-items:center;
+    padding:12px 12px 12px 12px; border-radius:var(--r-md); cursor:pointer;
+    background:rgba(255,255,255,.22); border:0; width:100%; text-align:left; color:inherit; font:inherit;
+    transition:background .2s;
+  }
+  .job{position:relative; z-index:1; background:transparent}
+  .jobs{position:relative}
+  .slider{
+    position:absolute; left:0; right:0; top:0; z-index:0; border-radius:var(--r-md); pointer-events:none;
+    background:var(--glass-strong);
+    transition:transform .55s var(--spring), height .55s var(--spring), opacity .3s, scale .35s cubic-bezier(.3,1.6,.5,1);
+  }
+  .slider.moving{scale:1.025 .9}
+  .co{width:40px; height:40px; border-radius:11px; display:grid; place-items:center; font-weight:700; color:#fff; font-size:15px}
+  .job .t{font-weight:600; font-size:15px; line-height:1.25; letter-spacing:-.01em}
+  .job .m{font-size:13px; color:var(--ink-3)}
+  .badge{
+    display:inline-flex; align-items:center; gap:6px; padding:6px 11px; border-radius:var(--r-pill);
+    font-size:13px; font-weight:600; white-space:nowrap;
+    background:var(--glass-strong);
+    box-shadow:inset 0 1px 0 var(--glass-edge), inset 0 0 0 1px var(--glass-edge-low);
+  }
+  .dot{width:7px; height:7px; border-radius:50%; flex:none}
+  .dot.strong{background:var(--strong)} .dot.partial{background:var(--partial)} .dot.weak{background:var(--weak)}
+  @media (max-width:440px){ .job{grid-template-columns:34px 1fr} .co{width:34px;height:34px} .job .badge{grid-column:2; justify-self:start} }
+
+  .card{
+    overflow:hidden;
+    margin-top:14px; padding:20px; border-radius:var(--r-lg);
+    transform-origin:50% 0;
+  }
+  .card .row1{display:flex; justify-content:space-between; gap:12px; align-items:flex-start}
+  .card .k{font-size:13px; color:var(--ink-3)}
+  .card .range{font-size:clamp(28px,3.4vw,36px); font-weight:800; letter-spacing:-.035em; line-height:1.1; margin:4px 0 2px}
+  .card .basis{font-size:13px; color:var(--ink-2)}
+  .bar{position:relative; height:10px; border-radius:var(--r-pill); margin:18px 0 8px;
+    background:rgba(127,135,160,.18); box-shadow:inset 0 1px 2px rgba(0,0,0,.08)}
+  .bar i{position:absolute; top:0; bottom:0; border-radius:inherit; left:0; width:0;
+    background:linear-gradient(90deg,var(--w1),var(--w2)); box-shadow:inset 0 1px 0 rgba(255,255,255,.5);
+    transition:left .6s cubic-bezier(.22,1.25,.36,1), width .6s cubic-bezier(.22,1.25,.36,1)}
+  .dot{transition:background-color .3s}
+  .job{transition:transform .45s cubic-bezier(.2,1.8,.4,1)}
+  .job:active{transform:scale(.985)}
+  .scale{display:flex; justify-content:space-between; font-size:12px; color:var(--ink-3)}
+  .why{list-style:none; padding:0; margin:16px 0 0; display:grid; gap:6px; font-size:14px; color:var(--ink-2)}
+  .why li{display:flex; gap:8px}
+  .why li::before{content:""; width:5px; height:5px; border-radius:50%; background:var(--ink-3); margin-top:9px; flex:none}
+  .card .foot{display:flex; flex-wrap:wrap; gap:8px; margin-top:16px; align-items:center}
+  .chip{font:500 13px/1 var(--font); padding:8px 12px; border-radius:var(--r-pill); border:0; cursor:pointer; color:var(--ink);
+    background:rgba(255,255,255,.3); box-shadow:inset 0 0 0 1px var(--glass-edge-low)}
+  .chip:hover{background:rgba(255,255,255,.5)}
+  :root[data-theme="dark"] .chip{background:rgba(255,255,255,.08)}
+  :root[data-theme="dark"] .chip:hover{background:rgba(255,255,255,.16)}
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]) .chip{background:rgba(255,255,255,.08)}
+    :root:not([data-theme="light"]) .chip:hover{background:rgba(255,255,255,.16)}
+  }
+  .chip[aria-pressed="true"]{background:var(--tint); color:#fff}
+  .card .foot .q{font-size:13px; color:var(--ink-3); margin-right:2px}
+  .thanks{font-size:13px; color:var(--ink-2)}
+  .illus{font-size:12px; color:var(--ink-3); text-align:center; margin:12px 0 0}
+
+  /* ---------- sections ---------- */
+  section{padding:56px 0}
+  h2{margin:0 0 12px; font-size:clamp(32px,4.4vw,52px); font-weight:800; letter-spacing:-.04em; line-height:1.02}
+  .sub{margin:0 0 36px; color:var(--ink-2); font-size:19px; max-width:52ch}
+
+  .frame{padding:10px; border-radius:var(--r-xl)}
+  .frame img{display:block; width:100%; height:auto; border-radius:calc(var(--r-xl) - 10px)}
+  .missing{display:grid; place-items:center; min-height:220px; border-radius:calc(var(--r-xl) - 10px);
+    background:rgba(255,255,255,.18); color:var(--ink-3); font-size:14px; text-align:center; padding:24px}
+
+  .pair{display:grid; grid-template-columns:1fr 1fr; gap:20px}
+  @media (max-width:820px){ .pair{grid-template-columns:1fr} }
+  .pair figure{margin:0; display:flex; flex-direction:column; gap:16px; padding:10px 10px 22px; border-radius:var(--r-xl)}
+  .pair figcaption{padding:0 14px}
+  .pair figcaption b{display:block; font-size:21px; letter-spacing:-.02em; margin-bottom:4px}
+  .pair figcaption span{color:var(--ink-2); font-size:16px}
+
+  /* the pipeline — a real sequence, so it's numbered */
+  .steps{list-style:none; margin:0; padding:0; display:grid; grid-template-columns:repeat(4,1fr); gap:14px; counter-reset:s}
+  @media (max-width:900px){ .steps{grid-template-columns:1fr 1fr} }
+  @media (max-width:520px){ .steps{grid-template-columns:1fr} }
+  .steps.two{grid-template-columns:1fr 1fr}
+  @media (max-width:520px){ .steps.two{grid-template-columns:1fr} }
+  .install > *, .hero > *{min-width:0}
+  .steps li{padding:22px; border-radius:var(--r-lg)}
+  .steps .num{position:absolute; top:16px; right:18px; width:30px; height:30px; display:grid; place-items:center; border-radius:50%;
+    font-weight:800; font-size:14px; color:var(--ink-2); background:var(--glass-strong);
+    box-shadow:inset 0 1px 0 var(--glass-edge), inset 0 0 0 1px var(--glass-edge-low);
+    opacity:0; transform:scale(.8); transition:opacity .25s ease, transform .45s var(--spring)}
+  .steps li:hover .num, .steps li:focus-within .num{opacity:1; transform:none}
+  @media (hover:none){ .steps .num{opacity:1; transform:none} }
+  .steps b{display:block; font-size:18px; letter-spacing:-.02em; margin:0 40px 6px 0}
+  .steps p{margin:0; color:var(--ink-2); font-size:15px}
+  .steps code{font:500 13.5px/1 ui-monospace, "SF Mono", Menlo, monospace; padding:3px 6px; border-radius:7px; background:rgba(127,135,160,.18); overflow-wrap:anywhere}
+  .opt{margin-top:18px; padding:16px 20px; border-radius:var(--r-md); font-size:15px; color:var(--ink-2); display:flex; gap:12px; align-items:center}
+  .opt svg{width:22px; height:22px; flex:none}
+
+  /* honesty panel */
+  .honest{display:grid; grid-template-columns:1.1fr 1fr; gap:20px; padding:36px; border-radius:var(--r-xl)}
+  @media (max-width:820px){ .honest{grid-template-columns:1fr; padding:26px} }
+  .honest h2{font-size:clamp(28px,3.6vw,42px)}
+  .honest p{color:var(--ink-2); margin:0 0 14px}
+  .facts{list-style:none; margin:0; padding:0; display:grid; gap:10px}
+  .facts li{padding:16px 18px; border-radius:var(--r-md); background:rgba(255,255,255,.24); box-shadow:inset 0 0 0 1px var(--glass-edge-low)}
+  :root[data-theme="dark"] .facts li{background:rgba(255,255,255,.05)}
+  @media (prefers-color-scheme: dark){ :root:not([data-theme="light"]) .facts li{background:rgba(255,255,255,.05)} }
+  .facts b{display:block; font-size:16px; margin-bottom:2px}
+  .facts span{font-size:14.5px; color:var(--ink-2)}
+  .sig{display:flex; gap:8px; flex-wrap:wrap; margin-top:6px}
+
+  /* install */
+  .install{display:grid; grid-template-columns:1fr 1.2fr; gap:28px; align-items:start}
+  @media (max-width:900px){ .install{grid-template-columns:1fr} }
+
+  footer{padding:40px 0 64px}
+  .foot-bar{display:flex; flex-wrap:wrap; gap:16px; justify-content:space-between; align-items:center; padding:18px 22px; border-radius:var(--r-pill); font-size:14.5px; color:var(--ink-2)}
+  @media (max-width:620px){ .foot-bar{border-radius:var(--r-lg)} }
+  .foot-bar nav{display:flex; gap:6px; flex-wrap:wrap}
+  .foot-bar a{text-decoration:none; padding:7px 12px; border-radius:var(--r-pill)}
+  .foot-bar a:hover{background:rgba(255,255,255,.3); color:var(--ink)}
+
+  @media (prefers-reduced-motion:reduce){
+    .bar i{transition:none}
+    .slider,.navpill,.squish,.job,.dot{transition:none}
+    html{scroll-behavior:auto}
+  }
+</style>
+</head>
+<body>
+
+<!-- lens filters are generated here per element (Chromium) -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs id="lensdefs"></defs></svg>
+
+<div class="wallpaper" aria-hidden="true">
+  <div class="paint"></div>
+  <div class="dots"></div>
+  <div class="grain"></div>
+</div>
+
+<nav class="nav glass lens" aria-label="Main" data-blur="3">
+  <span class="navpill" aria-hidden="true"></span>
+  <a class="brand" href="#top">
+    <span class="logo"><svg viewBox="0 0 16 16" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round"><path d="M2 11h12"/><path d="M4.5 11V7.5M8 11V4.5M11.5 11V6.5"/></svg></span>
+    Ballpark
+  </a>
+  <a class="link hide-sm" href="#how">How it works</a>
+  <a class="link hide-sm" href="#install">Install</a>
+  <button class="theme" id="theme" type="button" aria-label="Switch colour theme">
+    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="10" cy="10" r="7"/><path d="M10 3a7 7 0 0 0 0 14z" fill="currentColor"/></svg>
+  </button>
+  <a class="btn tinted squish" href="https://github.com/Nirbachan/ballpark">GitHub</a>
+</nav>
+
+<main class="wrap" id="top">
+
+  <!-- HERO -->
+  <div class="hero">
+    <div>
+      <h1>Know the range before you apply.</h1>
+      <p class="lede">Ballpark puts an estimated pay range on every LinkedIn job listing. Hover to see how it got there.</p>
+      <div class="ctas">
+        <a class="btn tinted squish" href="https://github.com/Nirbachan/ballpark">
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .5a11.5 11.5 0 0 0-3.64 22.41c.58.1.79-.25.79-.56v-2c-3.2.7-3.88-1.37-3.88-1.37-.53-1.33-1.28-1.69-1.28-1.69-1.05-.71.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.7 1.26 3.36.96.1-.75.4-1.26.73-1.55-2.56-.29-5.25-1.28-5.25-5.68 0-1.26.45-2.28 1.19-3.09-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.17 1.18a11 11 0 0 1 5.77 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.83 1.19 3.09 0 4.41-2.7 5.38-5.26 5.67.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.56A11.5 11.5 0 0 0 12 .5Z"/></svg>
+          Get it on GitHub
+        </a>
+        <a class="btn glass lens squish" href="#how">See how it estimates</a>
+      </div>
+      <p class="fine">Free and open source. Runs in your browser. Never claims to know anyone's actual pay.</p>
+    </div>
+
+    <!-- interactive demo -->
+    <div class="stage glass" aria-label="Interactive demo">
+      <div class="stage-head"><b>Jobs you might be interested in</b><span>Tap a role</span></div>
+      <ul class="jobs" id="jobs"></ul>
+      <div class="card glass" id="card" aria-live="polite"></div>
+      <p class="illus">Illustrative roles and figures</p>
+    </div>
+  </div>
+
+  <!-- DEMO -->
+  <section aria-labelledby="demo-h">
+    <h2 id="demo-h">See it on LinkedIn.</h2>
+    <p class="sub">The pay badge appears inline as you scroll. The estimate card opens when you hover.</p>
+    <div class="frame glass">
+      <img src="demo.gif" alt="Hovering a LinkedIn job listing opens the Ballpark estimate card" loading="lazy" data-fallback="demo.gif">
+    </div>
+  </section>
+
+  <!-- TWO SURFACES -->
+  <section aria-labelledby="surf-h">
+    <h2 id="surf-h">Two things on the page.</h2>
+    <p class="sub">Glance at the badge, open the card when a role is worth a closer look.</p>
+    <div class="pair">
+      <figure class="glass">
+        <img src="job-badges.png" alt="LinkedIn job list with a Ballpark pay badge on each row" loading="lazy" data-fallback="job-badges.png" style="border-radius:24px; width:100%; display:block">
+        <figcaption><b>Pay badge</b><span>An estimated range on every job row, coloured by how much the listing gave it to work with.</span></figcaption>
+      </figure>
+      <figure class="glass">
+        <img src="estimate-card.png" alt="Ballpark estimate card showing a range, signal strength and links to real salary data" loading="lazy" data-fallback="estimate-card.png" style="border-radius:24px; width:100%; display:block">
+        <figcaption><b>Estimate card</b><span>The range, what it was based on, links to check real numbers, and a quick “Was this close?”</span></figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <!-- HOW -->
+  <section id="how" aria-labelledby="how-h">
+    <h2 id="how-h">How it estimates.</h2>
+    <p class="sub">Every number comes from the listing in front of you and a set of market bands that ship with the extension.</p>
+    <ol class="steps">
+      <li class="glass"><span class="num" aria-hidden="true">1</span><b>Reads the listing</b><p>Title, company and location, taken from the job card on screen.</p></li>
+      <li class="glass"><span class="num" aria-hidden="true">2</span><b>Works out the level</b><p>Seniority from the title, plus the employer’s tier and the local market.</p></li>
+      <li class="glass"><span class="num" aria-hidden="true">3</span><b>Applies a band</b><p>Maps that combination to a market range in local currency, with the pay basis labelled.</p></li>
+      <li class="glass"><span class="num" aria-hidden="true">4</span><b>Shows its working</b><p>A range, a signal strength, and the inputs it used, so you can judge it.</p></li>
+    </ol>
+    <div class="opt glass">
+      <svg viewBox="0 0 22 22" aria-hidden="true"><circle cx="11" cy="11" r="10" fill="#F59F00"/><path d="M11 10v5.5M11 6.6v.1" stroke="#231600" stroke-width="2.2" stroke-linecap="round"/></svg>
+      <span>Optional: Add your own Anthropic API key in settings to refine estimates for unusual titles. Without it, nothing leaves your browser.</span>
+    </div>
+  </section>
+
+  <!-- HONESTY -->
+  <section aria-labelledby="honest-h">
+    <div class="honest glass">
+      <div>
+        <h2 id="honest-h">An estimate, and it says so.</h2>
+        <p>Ballpark gives you a reasonable starting point for a conversation about pay. It isn’t salary data, and it never shows what a specific person earns.</p>
+        <p>Signal strength tells you how complete the listing was, not how accurate the number is. A strong signal on an unusual role can still be off.</p>
+        <div class="sig">
+          <span class="badge"><i class="dot strong"></i>Strong</span>
+          <span class="badge"><i class="dot partial"></i>Partial</span>
+          <span class="badge"><i class="dot weak"></i>Weak</span>
+        </div>
+      </div>
+      <ul class="facts">
+        <li><b>Runs locally</b><span>No server, no account, no tracking. Your browsing stays in your browser.</span></li>
+        <li><b>Labels the pay basis</b><span>CTC in India, tax-free in the UAE, and a note when stock is likely part of the package.</span></li>
+        <li><b>Learns from you</b><span>Answer “Was this close?” and Ballpark keeps a private hit rate on your device.</span></li>
+        <li><b>Points to real numbers</b><span>Every card links out to salary sources so you can check it.</span></li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- INSTALL -->
+  <section id="install" aria-labelledby="inst-h">
+    <div class="install">
+      <div>
+        <h2 id="inst-h">Installs in 60 seconds.</h2>
+        <p class="sub" style="margin-bottom:24px">Ballpark isn’t on the Chrome Web Store yet, so you load it yourself. Works in Chrome, Edge, Brave and Arc.</p>
+        <a class="btn tinted squish" href="https://github.com/Nirbachan/ballpark/archive/refs/heads/main.zip">Download ZIP</a>
+      </div>
+      <ol class="steps two">
+        <li class="glass"><span class="num" aria-hidden="true">1</span><b>Download</b><p>Get the ZIP and unzip it anywhere you’ll keep it.</p></li>
+        <li class="glass"><span class="num" aria-hidden="true">2</span><b>Open extensions</b><p>Go to <code>chrome://extensions</code> in a new tab.</p></li>
+        <li class="glass"><span class="num" aria-hidden="true">3</span><b>Developer mode</b><p>Switch it on, top right of the page.</p></li>
+        <li class="glass"><span class="num" aria-hidden="true">4</span><b>Load unpacked</b><p>Pick the unzipped folder, then open LinkedIn Jobs.</p></li>
+      </ol>
+    </div>
+  </section>
+
+</main>
+
+<footer class="wrap">
+  <div class="foot-bar glass">
+    <span>Built by Nirbachan Pattanaik. Free and open source.</span>
+    <nav aria-label="Footer">
+      <a href="https://github.com/Nirbachan/ballpark">GitHub</a>
+      <a href="https://www.linkedin.com/in/nirbachan">LinkedIn</a>
+      <a href="#top">Back to top</a>
+    </nav>
+  </div>
+</footer>
+
+<script>
+(function(){
+  // Chromium supports url() in backdrop-filter → true lensing. Safari keeps plain blur.
+  try{
+    var brands = (navigator.userAgentData && navigator.userAgentData.brands) || [];
+    if (brands.some(function(b){return /Chromium/.test(b.brand)})) document.documentElement.classList.add('refract');
+  }catch(e){}
+
+  // theme toggle — cross-fades the whole page where View Transitions exist
+  var root = document.documentElement, key = 'ballpark-theme';
+  var reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  try{ var saved = localStorage.getItem(key); if (saved) root.dataset.theme = saved; }catch(e){}
+  document.getElementById('theme').addEventListener('click', function(){
+    var dark = root.dataset.theme ? root.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+    function apply(){
+      root.dataset.theme = dark ? 'light' : 'dark';
+      try{ localStorage.setItem(key, root.dataset.theme); }catch(e){}
+    }
+    if (document.startViewTransition && !reduce) document.startViewTransition(apply); else apply();
+  });
+
+  // screenshot fallbacks for local preview
+  document.querySelectorAll('img[data-fallback]').forEach(function(img){
+    function swap(){
+      var d = document.createElement('div');
+      d.className = 'missing';
+      d.textContent = img.dataset.fallback + ' shows here once it sits next to index.html in docs/';
+      img.replaceWith(d);
+    }
+    if (img.complete && img.naturalWidth === 0) swap(); else img.addEventListener('error', swap);
+  });
+
+  // demo data — invented employers, illustrative figures
+  var roles = [
+    {t:'Senior Product Manager, AI', co:'Lumen Pay', c:'#3B5BDB', loc:'Bengaluru · Hybrid', badge:'₹38–52 L', sig:'strong',
+     range:'₹38–52 L', basis:'per year, CTC', lo:38, hi:52, min:20, max:80, unit:'₹ L',
+     why:['Senior level from “Senior … Manager”','Product-led fintech, upper tier','Bengaluru market band']},
+    {t:'AI Strategy Lead', co:'Harbour Group', c:'#7048E8', loc:'Dubai · On-site', badge:'AED 48–62K', sig:'partial',
+     range:'AED 48–62K', basis:'per month, tax-free', lo:48, hi:62, min:25, max:90, unit:'AED K',
+     why:['“Lead” read as senior manager','Employer tier unclear from listing','UAE market band, tax-free basis']},
+    {t:'Principal, Automation Enablement', co:'Fenwick Bio', c:'#E8590C', loc:'London · Hybrid', badge:'£95–125K', sig:'partial',
+     range:'£95–125K', basis:'per year, base', lo:95, hi:125, min:50, max:180, unit:'£K',
+     why:['“Principal” mapped to director band','Large pharma employer','London market band']},
+    {t:'Change Analyst', co:'Orbit Retail', c:'#0CA678', loc:'Amsterdam · Remote', badge:'€46–64K', sig:'weak',
+     range:'€46–64K', basis:'per year, base', lo:46, hi:64, min:30, max:110, unit:'€K',
+     why:['No seniority word in the title','Employer not recognised','Netherlands market band']}
+  ];
+  var sigName = {strong:'Strong',partial:'Partial',weak:'Weak'};
+  var list = document.getElementById('jobs'), card = document.getElementById('card');
+  var canHover = matchMedia('(hover:hover)').matches;
+
+  // card skeleton is built once; switching roles updates it in place
+  card.innerHTML =
+    '<div class="row1"><div><div class="k">Estimated range</div>'+
+      '<div class="range" data-p="range"></div><div class="basis" data-p="basis"></div></div>'+
+      '<span class="badge"><i class="dot" data-p="dot"></i><span data-p="sig"></span></span></div>'+
+    '<div class="bar"><i data-p="bar"></i></div>'+
+    '<div class="scale"><span data-p="min"></span><span data-p="unit"></span><span data-p="max"></span></div>'+
+    '<ul class="why" data-p="why"></ul>'+
+    '<div class="foot" data-p="foot"></div>';
+  var P = {}; card.querySelectorAll('[data-p]').forEach(function(el){ P[el.dataset.p] = el });
+  var FOOT = '<span class="q">Was this close?</span>'+
+    '<button class="chip squish" type="button">Yes</button><button class="chip squish" type="button">Too high</button><button class="chip squish" type="button">Too low</button>';
+  P.foot.addEventListener('click', function(e){
+    if (!e.target.closest('.chip')) return;
+    swapContent([P.foot], function(){ P.foot.innerHTML = '<span class="thanks">Saved on this device. It feeds your private hit rate.</span>' });
+  });
+
+  // the one easing every demo motion shares
+  var EASE = 'cubic-bezier(.22,1,.36,1)';
+
+  // fade parts out, change them, measure, then ease height and fade parts back in
+  var token = 0;
+  function swapContent(parts, change){
+    var my = ++token;
+    if (reduce){ change(); return; }
+    var fromH = card.getBoundingClientRect().height;
+    card.getAnimations().forEach(function(a){ a.cancel() });
+    var outs = parts.map(function(el){
+      el.getAnimations().forEach(function(a){ a.cancel() });
+      return el.animate([{opacity:1, filter:'blur(0)', transform:'none'},{opacity:0, filter:'blur(5px)', transform:'translateY(-3px)'}],
+        {duration:80, easing:'ease-in', fill:'forwards'});
+    });
+    Promise.all(outs.map(function(a){ return a.finished.catch(function(){}) })).then(function(){
+      if (my !== token) return;
+      change();
+      var toH = card.getBoundingClientRect().height;
+      if (Math.abs(toH - fromH) > 1)
+        card.animate([{height:fromH+'px'},{height:toH+'px'}], {duration:420, easing:EASE});
+      parts.forEach(function(el, k){
+        el.getAnimations().forEach(function(a){ a.cancel() });
+        el.animate([{opacity:0, filter:'blur(5px)', transform:'translateY(4px)'},{opacity:1, filter:'blur(0)', transform:'none'}],
+          {duration:300, delay:k*18, easing:EASE, fill:'backwards'});
+      });
+    });
+  }
+
+  function fill(r){
+    P.range.textContent = r.range;
+    P.basis.textContent = r.basis;
+    P.sig.textContent = sigName[r.sig] + ' signal';
+    P.min.textContent = r.min; P.max.textContent = r.max;
+    P.unit.textContent = 'Market spread, ' + r.unit;
+    P.why.innerHTML = r.why.map(function(x){ return '<li>'+x+'</li>' }).join('');
+    P.foot.innerHTML = FOOT;
+  }
+  function moveBar(r){
+    P.dot.className = 'dot ' + r.sig;
+    P.bar.style.left  = ((r.lo-r.min)/(r.max-r.min)*100) + '%';
+    P.bar.style.width = ((r.hi-r.lo)/(r.max-r.min)*100) + '%';
+  }
+
+  roles.forEach(function(r,i){
+    var li = document.createElement('li');
+    li.innerHTML =
+      '<button class="job" type="button" aria-pressed="'+(i===0)+'">'+
+        '<span class="co" style="background:'+r.c+'">'+r.co[0]+'</span>'+
+        '<span><span class="t">'+r.t+'</span><br><span class="m">'+r.co+' · '+r.loc+'</span></span>'+
+        '<span class="badge"><i class="dot '+r.sig+'"></i>'+r.badge+'</span>'+
+      '</button>';
+    list.appendChild(li);
+  });
+  var rows = list.querySelectorAll('.job');
+
+  // sliding glass behind the active row
+  var slider = document.createElement('div');
+  slider.className = 'slider glass';
+  slider.setAttribute('aria-hidden','true');
+  list.appendChild(slider);
+  var at = -1, moveT;
+  function placeSlider(i, animate){
+    var row = rows[i];
+    if (animate && !reduce && i !== at){
+      slider.classList.add('moving');
+      clearTimeout(moveT); moveT = setTimeout(function(){ slider.classList.remove('moving') }, 180);
+    }
+    if (!animate){ slider.style.transition = 'none' }
+    slider.style.transform = 'translateY(' + row.parentNode.offsetTop + 'px)';
+    slider.style.height = row.offsetHeight + 'px';
+    if (!animate){ void slider.offsetWidth; slider.style.transition = '' }
+    at = i;
+  }
+
+  var current = -1, intent;
+  function select(i){
+    clearTimeout(intent);
+    placeSlider(i, current !== -1);
+    if (i === current) return;
+    var first = current === -1;
+    current = i;
+    rows.forEach(function(b,j){ b.setAttribute('aria-pressed', j===i) });
+    var r = roles[i];
+    moveBar(r);
+    if (first) fill(r);
+    else swapContent([P.range, P.basis, P.sig, P.unit, P.min, P.max, P.why, P.foot], function(){ fill(r) });
+  }
+  rows.forEach(function(b,i){
+    b.addEventListener('click', function(){ select(i) });
+    // the glass follows the pointer at once; the card waits until it rests
+    b.addEventListener('pointerenter', function(e){
+      if (e.pointerType !== 'mouse' || !canHover) return;
+      placeSlider(i, true);
+      clearTimeout(intent); intent = setTimeout(function(){ select(i) }, 90);
+    });
+  });
+  list.addEventListener('pointerleave', function(e){
+    if (e.pointerType !== 'mouse') return;
+    clearTimeout(intent);
+    if (current > -1) placeSlider(current, true);
+  });
+  addEventListener('resize', function(){ if (current > -1) placeSlider(current, false) });
+  select(0);
+
+  // nav: a glass pill that slides between items, appearing in place the first time
+  var nav = document.querySelector('.nav'), pill = nav.querySelector('.navpill');
+  function pillTo(el){
+    var wasOn = pill.classList.contains('on');
+    if (!wasOn) pill.style.transition = 'opacity .25s';
+    pill.style.transform = 'translateX(' + el.offsetLeft + 'px)';
+    pill.style.width = el.offsetWidth + 'px';
+    if (!wasOn){ void pill.offsetWidth; pill.style.transition = '' }
+    pill.classList.add('on');
+  }
+  nav.querySelectorAll('a.link, .brand, .theme').forEach(function(el){
+    el.addEventListener('pointerenter', function(){ pillTo(el) });
+  });
+  nav.querySelector('.btn').addEventListener('pointerenter', function(){ pill.classList.remove('on') });
+  nav.addEventListener('pointerleave', function(){ pill.classList.remove('on') });
+
+  // light follows the pointer across every glass surface
+  if (matchMedia('(hover:hover)').matches){
+    document.querySelectorAll('.glass').forEach(function(el){
+      el.addEventListener('pointermove', function(e){
+        var r = el.getBoundingClientRect();
+        el.style.setProperty('--mx', (e.clientX - r.left) + 'px');
+        el.style.setProperty('--my', (e.clientY - r.top) + 'px');
+        el.classList.add('lit');
+      });
+      el.addEventListener('pointerleave', function(){ el.classList.remove('lit') });
+    });
+  }
+
+  // Chromium: real edge refraction. Each .lens gets a displacement map
+  // shaped to its own size and corner radius, so the rim bends what's behind it.
+  if (!root.classList.contains('refract')) return;
+  var defs = document.getElementById('lensdefs'), n = 0;
+  function mapSVG(w, h, rad, edge){
+    var inner = Math.max(0, rad - edge);
+    return '<svg xmlns="http://www.w3.org/2000/svg" width="'+w+'" height="'+h+'">'+
+      '<defs>'+
+        '<linearGradient id="r" x1="0" x2="1" y1="0" y2="0"><stop offset="0" stop-color="#000"/><stop offset="1" stop-color="#f00"/></linearGradient>'+
+        '<linearGradient id="b" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#000"/><stop offset="1" stop-color="#00f"/></linearGradient>'+
+        '<filter id="s" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="'+(edge/2.4).toFixed(1)+'"/></filter>'+
+      '</defs>'+
+      '<rect width="'+w+'" height="'+h+'" fill="#800080"/>'+
+      '<rect width="'+w+'" height="'+h+'" rx="'+rad+'" fill="url(#r)"/>'+
+      '<rect width="'+w+'" height="'+h+'" rx="'+rad+'" fill="url(#b)" style="mix-blend-mode:screen"/>'+
+      '<rect x="'+edge+'" y="'+edge+'" width="'+(w-2*edge)+'" height="'+(h-2*edge)+'" rx="'+inner+'" fill="#800080" filter="url(#s)"/>'+
+    '</svg>';
+  }
+  function build(el){
+    var w = Math.round(el.offsetWidth), h = Math.round(el.offsetHeight);
+    if (w < 4 || h < 4) return;
+    if (el._w === w && el._h === h) return;
+    el._w = w; el._h = h;
+    var rad = Math.min(parseFloat(getComputedStyle(el).borderTopLeftRadius) || 0, w/2, h/2);
+    var edge = Math.max(6, Math.min(Math.min(w, h) * 0.22, 40));
+    var scale = Math.min(Math.min(w, h) * 0.45, 80);
+    var id = el._lid || (el._lid = 'lens' + (n++));
+    var old = document.getElementById(id); if (old) old.remove();
+    var f = document.createElementNS('http://www.w3.org/2000/svg', 'filter');
+    f.setAttribute('id', id);
+    f.setAttribute('x', '0'); f.setAttribute('y', '0');
+    f.setAttribute('width', w); f.setAttribute('height', h);
+    f.setAttribute('filterUnits', 'userSpaceOnUse');
+    f.setAttribute('primitiveUnits', 'userSpaceOnUse');
+    f.setAttribute('color-interpolation-filters', 'sRGB');
+    f.innerHTML =
+      '<feImage href="data:image/svg+xml;utf8,'+encodeURIComponent(mapSVG(w, h, rad, edge))+'" x="0" y="0" width="'+w+'" height="'+h+'" preserveAspectRatio="none" result="map"/>'+
+      '<feDisplacementMap in="SourceGraphic" in2="map" scale="'+(-scale).toFixed(0)+'" xChannelSelector="R" yChannelSelector="B"/>';
+    defs.appendChild(f);
+    var blur = el.dataset.blur || '6';
+    el.style.setProperty('--lensf', 'url(#'+id+') blur('+blur+'px) saturate(185%)');
+  }
+  var lenses = document.querySelectorAll('.glass.lens');
+  lenses.forEach(build);
+  var ro = new ResizeObserver(function(entries){
+    entries.forEach(function(en){
+      var el = en.target;
+      clearTimeout(el._rt); el._rt = setTimeout(function(){ build(el) }, 140);
+    });
+  });
+  lenses.forEach(function(el){ ro.observe(el) });
+})();
+</script>
+</body>
+</html>
